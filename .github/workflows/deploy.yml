@@ -1,0 +1,86 @@
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+name: Create Release
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Build
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_darwin_amd64 .
+          zip --junk-paths collage_darwin_amd64 collage_darwin_amd64
+          GOOS=linux GOARCH=arm go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_linux_arm .
+          zip --junk-paths collage_linux_arm collage_linux_arm
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_linux_amd64 .
+          zip --junk-paths collage_linux_amd collage_linux_amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_windows_amd64 .
+          zip --junk-paths collage_windows_amd collage_windows_amd64
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+      - name: Upload Release Asset darwin/amd64
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          asset_path: ./collage_darwin_amd64.zip
+          asset_name: collage_darwin_amd64.zip
+          asset_content_type: application/zip
+          
+      - name: Upload Release Asset windows/amd64
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          asset_path: ./collage_windows_amd64.zip
+          asset_name: collage_windows_amd64.zip
+          asset_content_type: application/zip
+
+      - name: Upload Release Asset linux/arm
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          asset_path: ./collage_linux_arm.zip
+          asset_name: collage_linux_arm.zip
+          asset_content_type: application/zip
+
+      - name: Upload Release Asset linux/amd64
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          asset_path: ./collage_linux_amd64.zip
+          asset_name: collage_linux_amd64.zip
+          asset_content_type: application/zip
