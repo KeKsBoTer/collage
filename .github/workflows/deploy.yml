@@ -27,8 +27,8 @@ jobs:
           zip --junk-paths collage_linux_arm collage_linux_arm
           GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_linux_amd64 .
           zip --junk-paths collage_linux_amd64 collage_linux_amd64
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_windows_amd64 .
-          zip --junk-paths collage_windows_amd64 collage_windows_amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -a -installsuffix nocgo -o collage_windows_amd64.exe .
+          zip --junk-paths collage_windows_amd64 collage_windows_amd64.exe
 
       - name: Create Release
         id: create_release
