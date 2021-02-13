@@ -4,16 +4,16 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/gif"
-	_ "image/gif"
 	"image/jpeg"
-	_ "image/jpeg"
 	"image/png"
-	_ "image/png"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"time"
 
 	glob "github.com/bmatcuk/doublestar/v2"
@@ -71,8 +71,29 @@ func main() {
 
 	targetImage := image.NewRGBA(image.Rectangle{Max: targetSize})
 
-	var c chan int = make(chan int)
-	images := 0
+	// image Copy instruction information
+	type imgCopy struct {
+		image  image.Image
+		bounds image.Rectangle
+	}
+
+	var wg sync.WaitGroup
+	var jobs chan imgCopy = make(chan imgCopy)
+
+	// define worker function that writes images to target image
+	worker := func(jobs <-chan imgCopy) {
+		defer wg.Done()
+		for c := range jobs {
+			size := c.bounds.Size()
+			smallImage := resize.Resize(uint(size.X), uint(size.Y), c.image, resize.Lanczos3)
+			draw.Draw(targetImage, c.bounds, smallImage, image.Pt(0, 0), draw.Src)
+		}
+	}
+
+	for w := 1; w <= runtime.NumCPU(); w++ {
+		wg.Add(1)
+		go worker(jobs)
+	}
 
 	x := 0
 	y := 0
@@ -101,32 +122,12 @@ func main() {
 		if y+int(targetHeight) > targetSize.Y {
 			break
 		}
-
 		// copy async as it is only writing to a fixed place
 		// (no goroutine will write to the same place in the image)
-		go func(x int, y int) {
-			//var copyImage func()
-			switch input := img.(type) {
-			case *image.RGBA:
-				// copy directly for RGBA as this is faster
-				sub := targetImage.SubImage(image.Rect(x, y, x+int(targetWidth), y+int(targetHeight))).(*image.RGBA)
-				for r := 0; r < int(targetHeight); r++ {
-					copy(
-						sub.Pix[r*sub.Stride:r*sub.Stride+int(actualWidth)*4],
-						input.Pix[r*input.Stride:r*input.Stride+int(actualWidth)*4],
-					)
-				}
-			default:
-				smallImage := resize.Resize(uint(targetWidth), uint(targetHeight), img, resize.Lanczos3)
-				for i := 0; i < int(targetHeight); i++ {
-					for j := 0; j < int(actualWidth); j++ {
-						targetImage.Set(x+j, y+i, smallImage.At(j, i))
-					}
-				}
-			}
-			c <- 1
-		}(x, y)
-		images++
+		jobs <- imgCopy{
+			image:  img,
+			bounds: image.Rect(x, y, x+targetWidth, y+targetHeight),
+		}
 		x += int(actualWidth)
 		if x == targetImage.Rect.Size().X {
 			y += int(targetHeight)
@@ -134,12 +135,12 @@ func main() {
 		}
 	}
 
-	// wait for all images to copy
-	for i := 0; i < images; i++ {
-		<-c
-	}
+	close(jobs)
+	wg.Wait()
 
 	outputFile, err := os.Create(outputFilePath)
+	defer outputFile.Close()
+
 	switch filepath.Ext(outputFilePath) {
 	case ".png":
 		err = png.Encode(outputFile, targetImage)
